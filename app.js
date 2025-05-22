@@ -90,7 +90,7 @@ app.post('/save-article', async (request, response) => {
             await article.save();
 
             // Retrouver l'index du tableau liée à l'id
-            return response.json({message: 'Article modifié avec succès'});
+            return response.json({code: "200", message: 'Article modifié avec succès', data: article});
         }
     }
 
@@ -104,7 +104,7 @@ app.post('/save-article', async (request, response) => {
     // Sauvegarder en base l'article avec le JSON en question
     await Article.create(articleJSON);
 
-    return response.json({message: `Article ajouté avec succès`});
+    return response.json({code: '200', message: `Article ajouté avec succès`, data : articleJSON});
 });
 
 app.delete('/article/:uuid', async (request, response) => {
@@ -123,13 +123,13 @@ app.delete('/article/:uuid', async (request, response) => {
 
     // CAS: Article pas trouvé
     if (!article){
-        return response.json({message: `Impossible de supprimer un article inexistant : ${uuid}`});
+        return response.json({code: '702', message: `Impossible de supprimer un article dont l'UID ${uuid} n'existe pas`, data: null});
     }
     
     // Supprimer un element de la bdd si nous l'avons déjà récupérer
     await Article.findOneAndDelete({ uuid: uuid});
 
-    return response.json({message: `Article supprimé avec succès : ${uuid}`});
+    return response.json({code: '200', message: `Article supprimé avec succès : ${uuid}`, data: article});
 });
 
 // Lancer le serveur
