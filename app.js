@@ -8,6 +8,31 @@ const app = express();
 // Débloque le payload
 app.use(express.json());
 
+// ----------------------------------------------------------
+// * MongoDB
+// ----------------------------------------------------------
+const mongoose = require('mongoose');
+
+// Si connexion reussie
+mongoose.connection.once('open', () => {
+    console.log(`Connecté(e) à la base de données`);
+});
+
+// Si erreur bdd
+mongoose.connection.on('error', (err) => {
+    console.log(`Erreur de la base données`);
+});
+
+// Enclencher à la connexion
+mongoose.connect('mongodb://127.0.0.1:27017/db_article');
+
+// ----------------------------------------------------------
+// * Creer un model/entité
+// ----------------------------------------------------------
+// 1er param on peut ignorer
+// Dernier param = nom de la table
+const Article = mongoose.model('Article', { uuid: String, title : String, content : String, author : String }, 'articles');
+
 // --------------------------------------------------------------
 // DATA
 // --------------------------------------------------------------
@@ -22,36 +47,31 @@ let articles = [
 // ROUTES
 // --------------------------------------------------------------
 
-app.get('/articles', (request, response) => {
-    // Un JSON ENTIER Dans un String : Pour l'avoir en JSON pure/objet il faut parse
-    const articlesJSON = JSON.parse(`{ "pseudo" : "Isaac" }`);
-    console.log(`articleJSON : ${articlesJSON}`);
+app.get('/articles', async (request, response) => {
+    // Récupérer les articles dans la base de données
+    const articles = await Article.find();
 
-    // Un OBJET JS : Pour l'avoir en JSON pure/objet il faut le stringify
-    const articlesJSONString = JSON.stringify(articles);
-    console.log(`articleJSONString : ${articlesJSONString}`);
-
-    // A FAIRE: On envoie des objets JS (pas du json déjà transformé: ex JSON.stringify)
+    // On envoie les articles récupérés en BDD dans la réponsé JSON
     return response.json(articles);
 });
 
-app.get('/article/:id', (request, response) => {
-    // Récupérer le parametre nommé id dans l'url
-    // PS: Ne pas oublier de le convertir en entier
-    const id = parseInt(request.params.id);
 
-    // A FAIRE : PREDICATE (en java on appel les stream)
-    const article = articles.find(articleIteration => articleIteration.id == id);
+app.get('/article/:uuid', async (request, response) => {
+    // Récupérer le parametre nommé uuid dans l'url
+    const uuid = request.params.uuid;
+
+    // Récupérer l'article dans la BDD
+    const article = await Article.findOne({uuid : uuid});
 
     // CAS : Erreur on trouve pas d'article (si il est null)
     if (!article){
-        return response.json({message: `Aucun article article trouvé avcec l'id : ${id}`});
+        return response.json({message: `Aucun article article trouvé avec l'id : ${uuid}`});
     }
   
     return response.json(article);
 });
 
-app.post('/save-article', (request, response) => {
+app.post('/save-article', async (request, response) => {
     // Récupérer l'article envoyé en JSON
     // Exemple : { id: 2, .....}
     const articleJSON = request.body;
@@ -59,22 +79,25 @@ app.post('/save-article', (request, response) => {
     // Comment savoir si c'est un ajout ou un edition ?
     // Si on a un id dans l'article et que en plus l'article existe déjà dans le tableau 
     // ALORS EDITION
-    // EN JS: Si ID existe dans le JSON
-    if (articleJSON.id) {
+    // EN JS: Si uuid existe dans le JSON
+    if (articleJSON.uuid) {
         // Forcer l'id entier
-        const id = parseInt(articleJSON.id)
+        const uuid = articleJSON.uuid
 
         // Si article existe dans le tableau
-        // Imaginons JSON = { id: 2, .....}, on va voir si le tableau a un article avec le même id
-        const article = articles.find(articleIteration => articleIteration.id == id);
+        // Imaginons JSON = { id: 2, .....}, on va voir si le tableau a un article avec le même uuid
+        const article = await Article.findOne({uuid: uuid});
     
         // Si article trouvé avec le même id : MODIFICATION
         if (article){
-            // Retrouver l'index tableau
-            const articleIndexToEdit = articles.findIndex(articleIteration => articleIteration.id == id);
-            
+
             // Remplacer un element du tableau grace à un index
-            articles[articleIndexToEdit] = articleJSON;
+            article.content = articleJSON.content;
+            article.title = articleJSON.title;
+            article.author = articleJSON.author;
+
+            // Sauvegarde en base de données
+            await article.save();
 
             // Retrouver l'index du tableau liée à l'id
             return response.json({message: 'Article modifié avec succès'});
@@ -82,33 +105,41 @@ app.post('/save-article', (request, response) => {
     }
 
     // PAR DEFAUT => CREATION
-    articles.push(articleJSON);
+    // Générer un uuid
+    const { v4: uuidv4 } = require('uuid');
+
+    // -- ecraser ou créer le champ uuid dans le json qu'on a récupéré avant de l'inserer en base
+    articleJSON.uuid = uuidv4();
+
+    // Sauvegarder en base l'article avec le JSON en question
+    await Article.create(articleJSON);
+
     return response.json({message: `Article ajouté avec succès`});
 });
 
-app.delete('/article/:id', (request, response) => {
+app.delete('/article/:uuid', async (request, response) => {
     // Si pas d'id envoyé
-    if (!request.params.id) {
-        return response.json({message: `L'id est obligatoire`});
+    if (!request.params.uuid) {
+        return response.json({message: `L'uuid est obligatoire`});
     }
 
     // Récupérer le parametre nommé id dans l'url
-    const id = parseInt(request.params.id);
+    const uuid = request.params.uuid;
 
     // Pour supprimer on va supprimer grace à l'index
     // Donc trouver l'index avec un findIndex predicate id == id
-    // Retrouver l'index tableau
-    const articleIndexToDelete = articles.findIndex(articleIteration => articleIteration.id == id);
+    // Retrouver l'article qu'on veut supprimer en base
+    const article = await Article.findOne({uuid : uuid});
 
     // CAS: Article pas trouvé
-    if (articleIndexToDelete == -1){
-        return response.json({message: `Impossible de supprimer un article inexistant : ${id}`});
+    if (!article){
+        return response.json({message: `Impossible de supprimer un article inexistant : ${uuid}`});
     }
     
-    // Supprimer un element du tableau à partir Index, Nombre element à supprimer
-    articles.splice(articleIndexToDelete, 1)
+    // Supprimer un element de la bdd si nous l'avons déjà récupérer
+    await Article.findOneAndDelete({ uuid: uuid});
 
-    return response.json({message: `Article supprimé avec succès : ${id}`});
+    return response.json({message: `Article supprimé avec succès : ${uuid}`});
 });
 
 // Lancer le serveur
