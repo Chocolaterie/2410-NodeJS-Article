@@ -42,7 +42,7 @@ app.get('/articles', async (request, response) => {
     const articles = await Article.find();
 
     // On envoie les articles récupérés en BDD dans la réponsé JSON
-    return response.json(articles);
+    return response.json({ code: "200", message: `La liste des articles a été récupérés avec succès`, data: articles});
 });
 
 
@@ -55,10 +55,10 @@ app.get('/article/:uuid', async (request, response) => {
 
     // CAS : Erreur on trouve pas d'article (si il est null)
     if (!article){
-        return response.json({message: `Aucun article article trouvé avec l'id : ${uuid}`});
+        return response.json({code: "702", message: `Impossible de récupérer un article avec l'UID ${uuid}`, data: null});
     }
   
-    return response.json(article);
+    return response.json({code: "200", message: `Article récupéré avec succès`, data: article});
 });
 
 app.post('/save-article', async (request, response) => {
