@@ -1,6 +1,19 @@
 // Importer le module express
 const express = require('express');
 
+// MONGOOSE
+const mongooseConfig = require('./mongoose/mongoose-config.js');
+
+mongooseConfig.initConnection();
+
+// IMPORT DES SERVICES
+const articleService = require('./article/article-service.js');
+
+// IMPORT DES MODELS
+
+const Article = require('./mongoose/article-model.js');
+const User = require('./mongoose/user-model.js');
+
 // Instancier le serveur express
 const app = express();
 
@@ -14,32 +27,6 @@ app.use(express.json());
 const jwt = require('jsonwebtoken');
 const JWT_SECRET_KEY = "Chocolatine";
 
-// ----------------------------------------------------------
-// * MongoDB
-// ----------------------------------------------------------
-const mongoose = require('mongoose');
-
-// Si connexion reussie
-mongoose.connection.once('open', () => {
-    console.log(`Connecté(e) à la base de données`);
-});
-
-// Si erreur bdd
-mongoose.connection.on('error', (err) => {
-    console.log(`Erreur de la base données`);
-});
-
-// Enclencher à la connexion
-mongoose.connect('mongodb://127.0.0.1:27017/db_article');
-
-// ----------------------------------------------------------
-// * Creer un model/entité
-// ----------------------------------------------------------
-// 1er param on peut ignorer
-// Dernier param = nom de la table
-const Article = mongoose.model('Article', { uuid: String, title : String, content : String, author : String }, 'articles');
-
-const User = mongoose.model('User', { email: String, password : String}, 'users');
 
 // --------------------------------------------------------------
 // ROUTES
@@ -63,12 +50,12 @@ const authMiddleware = (request, response, next) => {
     next();
 }
 
-app.get('/articles', authMiddleware, async (request, response) => {
-    // Récupérer les articles dans la base de données
-    const articles = await Article.find();
+app.get('/articles', async (request, response) => {
+    // Appel mon service
+    const responseService = await articleService.getArticles();
 
     // On envoie les articles récupérés en BDD dans la réponsé JSON
-    return response.json({ code: "200", message: `La liste des articles a été récupérés avec succès`, data: articles});
+    return response.json(responseService);
 });
 
 app.get('/article/:uuid', async (request, response) => {
