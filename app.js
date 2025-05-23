@@ -8,6 +8,12 @@ const app = express();
 // Débloque le payload
 app.use(express.json());
 
+//---------------------------------------------------------------------------
+// * JWT CONFIG
+//---------------------------------------------------------------------------
+const jwt = require('jsonwebtoken');
+const JWT_SECRET_KEY = "Chocolatine";
+
 // ----------------------------------------------------------
 // * MongoDB
 // ----------------------------------------------------------
@@ -33,18 +39,37 @@ mongoose.connect('mongodb://127.0.0.1:27017/db_article');
 // Dernier param = nom de la table
 const Article = mongoose.model('Article', { uuid: String, title : String, content : String, author : String }, 'articles');
 
+const User = mongoose.model('User', { email: String, password : String}, 'users');
+
 // --------------------------------------------------------------
 // ROUTES
 // --------------------------------------------------------------
 
-app.get('/articles', async (request, response) => {
+// MIDDLEWARE
+const authMiddleware = (request, response, next) => {
+    // TESTER QU'ON EST CONNECTE
+    const token = request.headers.authorization.replace('Bearer ', '');
+
+    // verifier qu'il est valide
+    try {
+        const decoded = jwt.verify(token, JWT_SECRET_KEY);
+        console.log(decoded);
+    // Si erreur jwt (obligé de try catch jwt fait des throw)
+    } catch (err){
+        console.log(err);
+        return response.json({code: "700", message : "Token invalide"});
+    }
+    // On passe le middleware (on passe le mur)
+    next();
+}
+
+app.get('/articles', authMiddleware, async (request, response) => {
     // Récupérer les articles dans la base de données
     const articles = await Article.find();
 
     // On envoie les articles récupérés en BDD dans la réponsé JSON
     return response.json({ code: "200", message: `La liste des articles a été récupérés avec succès`, data: articles});
 });
-
 
 app.get('/article/:uuid', async (request, response) => {
     // Récupérer le parametre nommé uuid dans l'url
@@ -130,6 +155,22 @@ app.delete('/article/:uuid', async (request, response) => {
     await Article.findOneAndDelete({ uuid: uuid});
 
     return response.json({code: '200', message: `Article supprimé avec succès : ${uuid}`, data: article});
+});
+
+
+app.post('/auth', async (request, response) => {
+    // Tester le couple email / password
+    const user = await User.findOne({ email : request.body.email, password: request.body.password});
+
+    // Si pas ok pour couple
+    if (!user){
+        return response.json({code: '703', message: `Couple email/mot de passe incorrect`, data: null});
+    }
+
+    // Si couple => ok alors generer token
+    const token = jwt.sign({ email: user.email }, JWT_SECRET_KEY, {expiresIn : '10min' });
+
+    return response.json({code: '203', message: `Authentifié(e) avec succès !`, data: token});
 });
 
 // Lancer le serveur
